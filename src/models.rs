@@ -1,17 +1,20 @@
 use crate::schema::*;
 
 #[derive(Identifiable, Queryable, PartialEq, Debug)]
-#[table_name="entities"]
+#[table_name="entity"]
 pub struct Entity {
     pub id: i32,
 }
 
 #[derive(Identifiable, Queryable, PartialEq, Debug)]
+#[table_name="peer"]
+// Ideally, peers would be entities
 pub struct Peer {
     pub id: i32,
 }
 
 #[derive(Identifiable, Queryable, PartialEq, Debug)]
+#[table_name="event"]
 pub struct Event {
     pub id: i32,
     pub ts: chrono::NaiveDateTime,
@@ -21,13 +24,13 @@ pub struct Event {
 pub struct Retraction(pub Event);
 
 #[derive(Insertable)]
-#[table_name="events"]
+#[table_name="event"]
 pub struct LocalEvent {
     pub ts: chrono::NaiveDateTime,
 }
 
 #[derive(Insertable)]
-#[table_name="events"]
+#[table_name="event"]
 pub struct IncomingEvent {
     pub ts: chrono::NaiveDateTime,
 }

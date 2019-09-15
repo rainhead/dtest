@@ -1,39 +1,39 @@
-CREATE TABLE entities (
+CREATE TABLE entity (
     id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL
 );
 
-CREATE TABLE peers (
+CREATE TABLE peer (
     id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL
 );
 
-CREATE TABLE events (
+CREATE TABLE event (
     id INTEGER AUTO_INCREMENT PRIMARY KEY NOT NULL,
     ts TIMESTAMP NOT NULL,
-    peer INTEGER NOT NULL REFERENCES peers (id),
+    peer_id INTEGER NOT NULL REFERENCES peer (id),
     seq_no INTEGER NOT NULL
 );
-CREATE UNIQUE INDEX events_by_peer ON events (peer, seq_no DESC);
+CREATE UNIQUE INDEX event_by_peer ON event (peer_id, seq_no DESC);
 
 CREATE TABLE send_message_event (
-    asserted_at INTEGER PRIMARY KEY NOT NULL REFERENCES events (id),
+    asserted_at INTEGER PRIMARY KEY NOT NULL REFERENCES event (id),
     body TEXT NOT NULL
 );
 
 CREATE TABLE message (
-    entity_id INTEGER PRIMARY KEY NOT NULL REFERENCES entities (id)
+    entity_id INTEGER PRIMARY KEY NOT NULL REFERENCES entity (id)
 );
 
 CREATE TABLE message_body (
-    entity_id INTEGER NOT NULL REFERENCES entities (id),
-    asserted_at INTEGER NOT NULL REFERENCES events (id),
+    entity_id INTEGER NOT NULL REFERENCES entity (id),
+    asserted_at INTEGER NOT NULL REFERENCES event (id),
     body TEXT NOT NULL,
     PRIMARY KEY (entity_id, asserted_at)
 );
 
 CREATE TABLE peer_name (
-    peer_id INTEGER NOT NULL REFERENCES peers (id),
-    asserted_at INTEGER NOT NULL REFERENCES events (id),
-    retracted_at INTEGER REFERENCES events (id),
+    peer_id INTEGER NOT NULL REFERENCES peer (id),
+    asserted_at INTEGER NOT NULL REFERENCES event (id),
+    retracted_at INTEGER REFERENCES event (id),
     `name` TEXT NOT NULL,
     PRIMARY KEY (peer_id, asserted_at)
 );
