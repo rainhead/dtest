@@ -15,26 +15,26 @@ CREATE TABLE events (
 CREATE UNIQUE INDEX events_by_peer ON events (peer, seq_no DESC);
 
 CREATE TABLE send_message_event (
-    ts INTEGER PRIMARY KEY NOT NULL REFERENCES events (id),
+    asserted_at INTEGER PRIMARY KEY NOT NULL REFERENCES events (id),
     body TEXT NOT NULL
 );
 
 CREATE TABLE message (
-    id INTEGER PRIMARY KEY NOT NULL REFERENCES entities (id)
+    entity_id INTEGER PRIMARY KEY NOT NULL REFERENCES entities (id)
 );
 
 CREATE TABLE message_body (
-    id INTEGER NOT NULL REFERENCES entities (id),
-    ts INTEGER NOT NULL REFERENCES events (id),
+    entity_id INTEGER NOT NULL REFERENCES entities (id),
+    asserted_at INTEGER NOT NULL REFERENCES events (id),
     body TEXT NOT NULL,
-    PRIMARY KEY (id, ts)
+    PRIMARY KEY (entity_id, asserted_at)
 );
 
 CREATE TABLE peer_name (
-    peer INTEGER NOT NULL REFERENCES peers (id),
-    ts INTEGER NOT NULL REFERENCES events (id),
+    peer_id INTEGER NOT NULL REFERENCES peers (id),
+    asserted_at INTEGER NOT NULL REFERENCES events (id),
     retracted_at INTEGER REFERENCES events (id),
     `name` TEXT NOT NULL,
-    PRIMARY KEY (peer, ts)
+    PRIMARY KEY (peer_id, asserted_at)
 );
-CREATE INDEX valid_peer_name ON peer_name (peer) WHERE retracted_at IS NULL;
+CREATE INDEX valid_peer_name ON peer_name (peer_id) WHERE retracted_at IS NULL;

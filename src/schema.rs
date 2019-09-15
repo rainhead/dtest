@@ -14,23 +14,23 @@ table! {
 }
 
 table! {
-    message (id) {
-        id -> Integer,
+    message (entity_id) {
+        entity_id -> Integer,
     }
 }
 
 table! {
-    message_body (id, ts) {
-        id -> Integer,
-        ts -> Integer,
+    message_body (entity_id, asserted_at) {
+        entity_id -> Integer,
+        asserted_at -> Integer,
         body -> Text,
     }
 }
 
 table! {
-    peer_name (peer, ts) {
-        peer -> Integer,
-        ts -> Integer,
+    peer_name (peer_id, asserted_at) {
+        peer_id -> Integer,
+        asserted_at -> Integer,
         retracted_at -> Nullable<Integer>,
         name -> Text,
     }
@@ -43,8 +43,8 @@ table! {
 }
 
 table! {
-    send_message_event (ts) {
-        ts -> Integer,
+    send_message_event (asserted_at) {
+        asserted_at -> Integer,
         body -> Text,
     }
 }
@@ -56,11 +56,11 @@ table! {
 }
 
 joinable!(events -> peers (peer));
-joinable!(message -> entities (id));
-joinable!(message_body -> entities (id));
-joinable!(message_body -> events (ts));
-joinable!(peer_name -> peers (peer));
-joinable!(send_message_event -> events (ts));
+joinable!(message -> entities (entity_id));
+joinable!(message_body -> entities (entity_id));
+joinable!(message_body -> events (asserted_at));
+joinable!(peer_name -> peers (peer_id));
+joinable!(send_message_event -> events (asserted_at));
 joinable!(send_message_events -> events (event_id));
 
 allow_tables_to_appear_in_same_query!(
