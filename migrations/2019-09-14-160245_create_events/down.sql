@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS peer_name;
+DROP TABLE IF EXISTS message_body;
+DROP TABLE IF EXISTS message;
+DROP TABLE IF EXISTS send_message_event;
+DROP TABLE IF EXISTS events;
+DROP TABLE IF EXISTS peers;
+DROP TABLE IF EXISTS entities;
