@@ -30,6 +30,7 @@ table! {
 table! {
     peer (id) {
         id -> Integer,
+        is_local -> Bool,
     }
 }
 

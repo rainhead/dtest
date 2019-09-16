@@ -1,5 +1,9 @@
 use crate::schema::*;
 
+use chrono::prelude::*;
+use diesel::prelude::*;
+use diesel::sqlite::SqliteConnection;
+
 #[derive(Identifiable, Queryable, PartialEq, Debug)]
 #[table_name="entity"]
 pub struct Entity {
@@ -12,16 +16,45 @@ pub struct Entity {
 pub struct Peer {
     pub id: i32,
 }
+impl Peer {
+    pub fn local_peer_id(conn: &SqliteConnection) -> i32 {
+        peer::table.filter(peer::is_local).select(peer::id).first(conn).unwrap()
+    }
+}
 
-#[derive(Identifiable, Queryable, PartialEq, Debug)]
+#[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
 #[table_name="event"]
+#[belongs_to(Peer)]
 pub struct Event {
     pub id: i32,
     pub ts: chrono::NaiveDateTime,
+    pub peer_id: i32,
+    pub seq_no: i32,
 }
+impl Event {
+    pub fn next_seq_no_for_peer(peer_id: i32, conn: &SqliteConnection) -> i32 {
+        event::table
+            .filter(event::peer_id.eq(peer_id))
+            .select(event::seq_no)
+            .first::<i32>(conn)
+            .unwrap_or_default()
+            + 1
+    }
 
-// workaround per https://github.com/diesel-rs/diesel/issues/89
-pub struct Retraction(pub Event);
+    pub fn create_local(&self, conn: &SqliteConnection) {
+        let peer_id = Peer::local_peer_id(conn);
+        let seq_no = Self::next_seq_no_for_peer(peer_id, conn);
+        let now: DateTime<Utc> = Utc::now();
+        diesel::insert_into(event::table)
+            .values(&(
+                event::ts.eq(now.naive_utc()),
+                event::peer_id.eq(peer_id),
+                event::seq_no.eq(seq_no),
+            ))
+            .execute(conn)
+            .unwrap();
+    }
+}
 
 #[derive(Insertable)]
 #[table_name="event"]
@@ -29,11 +62,8 @@ pub struct LocalEvent {
     pub ts: chrono::NaiveDateTime,
 }
 
-#[derive(Insertable)]
-#[table_name="event"]
-pub struct IncomingEvent {
-    pub ts: chrono::NaiveDateTime,
-}
+// workaround per https://github.com/diesel-rs/diesel/issues/89
+pub struct Retraction(pub Event);
 
 #[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
 #[table_name="send_message_event"]
