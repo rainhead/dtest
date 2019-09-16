@@ -3,6 +3,7 @@ use crate::schema::*;
 use chrono::prelude::*;
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
+use diesel::insert_into;
 
 #[derive(Identifiable, Queryable, PartialEq, Debug)]
 #[table_name="entity"]
@@ -19,6 +20,15 @@ pub struct Peer {
 impl Peer {
     pub fn local_peer_id(conn: &SqliteConnection) -> i32 {
         peer::table.filter(peer::is_local).select(peer::id).first(conn).unwrap()
+    }
+
+    pub fn create_local_peer(conn: &SqliteConnection) {
+        insert_into(peer::table)
+            .values(&(
+                peer::is_local.eq(true),
+            ))
+            .execute(conn)
+            .expect("failed to crate local peer. Maybe it already exists?");
     }
 }
 
@@ -41,11 +51,11 @@ impl Event {
             + 1
     }
 
-    pub fn create_local(&self, conn: &SqliteConnection) {
+    pub fn create_local(conn: &SqliteConnection) {
         let peer_id = Peer::local_peer_id(conn);
         let seq_no = Self::next_seq_no_for_peer(peer_id, conn);
         let now: DateTime<Utc> = Utc::now();
-        diesel::insert_into(event::table)
+        insert_into(event::table)
             .values(&(
                 event::ts.eq(now.naive_utc()),
                 event::peer_id.eq(peer_id),
