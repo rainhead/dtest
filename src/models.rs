@@ -3,12 +3,18 @@ use crate::schema::*;
 use chrono::prelude::*;
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
-use diesel::insert_into;
+use diesel::{insert_into, select};
 
-#[derive(Identifiable, Queryable, PartialEq, Debug)]
+pub trait Relation {
+    fn run_rules(conn: &SqliteConnection) -> usize;
+}
+
+#[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
 #[table_name="entity"]
+#[belongs_to(Event, foreign_key="introduced_in")]
 pub struct Entity {
     pub id: i32,
+    pub introduced_in: i32,
 }
 
 #[derive(Identifiable, Queryable, PartialEq, Debug)]
@@ -28,7 +34,7 @@ impl Peer {
                 peer::is_local.eq(true),
             ))
             .execute(conn)
-            .expect("failed to crate local peer. Maybe it already exists?");
+            .expect("failed to create local peer. Maybe it already exists?");
     }
 }
 
@@ -51,18 +57,19 @@ impl Event {
             + 1
     }
 
-    pub fn create_local(conn: &SqliteConnection) {
+    pub fn create_local(conn: &SqliteConnection) -> i32 {
         let peer_id = Peer::local_peer_id(conn);
         let seq_no = Self::next_seq_no_for_peer(peer_id, conn);
-        let now: DateTime<Utc> = Utc::now();
+        let now = select(diesel::dsl::now).get_result::<NaiveDateTime>(conn).unwrap();
         insert_into(event::table)
             .values(&(
-                event::ts.eq(now.naive_utc()),
+                event::ts.eq(now),
                 event::peer_id.eq(peer_id),
                 event::seq_no.eq(seq_no),
             ))
             .execute(conn)
             .unwrap();
+        event::table.select(event::id).order(event::id.desc()).first(conn).unwrap()
     }
 }
 
@@ -72,10 +79,10 @@ pub struct LocalEvent {
     pub ts: chrono::NaiveDateTime,
 }
 
-// workaround per https://github.com/diesel-rs/diesel/issues/89
+// workaround for asserted_at + retracted_at per https://github.com/diesel-rs/diesel/issues/89
 pub struct Retraction(pub Event);
 
-#[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
+#[derive(Identifiable, Queryable, Associations, Insertable, PartialEq, Debug)]
 #[table_name="send_message_event"]
 #[belongs_to(Event, foreign_key="asserted_at")]
 #[primary_key(asserted_at)]
@@ -83,6 +90,20 @@ pub struct SendMessageEvent {
     pub asserted_at: i32,
     pub body: String,
 }
+impl Relation for SendMessageEvent {
+    fn run_rules(conn: &SqliteConnection) -> usize {
+        send_message_event::table
+            .select((send_message_event::asserted_at,))
+            .left_outer_join(entity::table.on(send_message_event::asserted_at.eq(entity::introduced_in)))
+            .filter(entity::introduced_in.is_null())
+            .insert_into(entity::table)
+            .into_columns((entity::introduced_in,))
+            .execute(conn)
+            .unwrap()
+    }
+}
+
+
 
 #[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
 #[table_name="message"]

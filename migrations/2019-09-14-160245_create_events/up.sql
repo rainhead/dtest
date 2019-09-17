@@ -1,5 +1,6 @@
 CREATE TABLE entity (
-    id INTEGER PRIMARY KEY NOT NULL
+    id INTEGER PRIMARY KEY NOT NULL,
+    introduced_in INTEGER NOT NULL REFERENCES event (id)
 );
 
 CREATE TABLE peer (

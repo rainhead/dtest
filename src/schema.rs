@@ -1,6 +1,7 @@
 table! {
     entity (id) {
         id -> Integer,
+        introduced_in -> Integer,
     }
 }
 
@@ -56,6 +57,7 @@ table! {
     }
 }
 
+joinable!(entity -> event (introduced_in));
 joinable!(event -> peer (peer_id));
 joinable!(message -> entity (entity_id));
 joinable!(message_body -> entity (entity_id));
