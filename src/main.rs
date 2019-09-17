@@ -20,4 +20,6 @@ pub fn main() {
         .execute(&conn)
         .unwrap();
     SendMessageEvent::run_rules(&conn);
+    Message::run_rules(&conn);
+    MessageBody::run_rules(&conn);
 }

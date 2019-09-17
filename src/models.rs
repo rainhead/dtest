@@ -103,14 +103,25 @@ impl Relation for SendMessageEvent {
     }
 }
 
-
-
 #[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
 #[table_name="message"]
 #[belongs_to(Entity)]
 #[primary_key(entity_id)]
 pub struct Message {
     pub entity_id: i32,
+}
+impl Relation for Message {
+    fn run_rules(conn: &SqliteConnection) -> usize {
+        entity::table
+            .select((entity::id,))
+            .inner_join(send_message_event::table.on(send_message_event::asserted_at.eq(entity::introduced_in)))
+            .left_outer_join(message::table)
+            .filter(message::entity_id.is_null())
+            .insert_into(message::table)
+            .into_columns((message::entity_id,))
+            .execute(conn)
+            .unwrap()
+    }
 }
 
 #[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
@@ -122,6 +133,20 @@ pub struct MessageBody {
     pub entity_id: i32,
     pub asserted_at: i32,
     pub body: String,
+}
+impl Relation for MessageBody {
+    fn run_rules(conn: &SqliteConnection) -> usize {
+        send_message_event::table
+            .inner_join(entity::table.on(send_message_event::asserted_at.eq(entity::introduced_in)))
+            .left_outer_join(
+                message_body::table.on(entity::id.eq(message_body::entity_id)
+                    .and(entity::introduced_in.eq(message_body::asserted_at))))
+            .filter(message_body::entity_id.is_null())
+            .select((entity::id, send_message_event::asserted_at, send_message_event::body))
+            .insert_into(message_body::table)
+            .execute(conn)
+            .unwrap()
+    }
 }
 
 #[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]

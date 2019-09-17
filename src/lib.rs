@@ -7,6 +7,9 @@ extern crate diesel;
 
 
 /*
+? which actions are, or are not, idempotent?
+? calculate record by record, or relationally?
+
 - incoming event
     - local: new send message event (body)
     - remote: serialized send message event (body)
