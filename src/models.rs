@@ -2,8 +2,9 @@ use crate::schema::*;
 
 use chrono::prelude::*;
 use diesel::prelude::*;
+use diesel::dsl::*;
 use diesel::sqlite::SqliteConnection;
-use diesel::{insert_into, select};
+use diesel::sql_query;
 
 pub trait Relation {
     fn run_rules(conn: &SqliteConnection) -> usize;
@@ -11,10 +12,10 @@ pub trait Relation {
 
 #[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
 #[table_name="entity"]
-#[belongs_to(Event, foreign_key="introduced_in")]
+#[belongs_to(Event, foreign_key="introduced_at")]
 pub struct Entity {
     pub id: i32,
-    pub introduced_in: i32,
+    pub introduced_at: i32,
 }
 
 #[derive(Identifiable, Queryable, PartialEq, Debug)]
@@ -36,6 +37,14 @@ impl Peer {
             .execute(conn)
             .expect("failed to create local peer. Maybe it already exists?");
     }
+
+    pub fn create(conn: &SqliteConnection) -> i32 {
+        insert_into(peer::table)
+            .default_values()
+            .execute(conn)
+            .unwrap();
+        peer::table.select(peer::id).order(peer::id.desc()).first(conn).unwrap()
+    }
 }
 
 #[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
@@ -51,16 +60,14 @@ impl Event {
     pub fn next_seq_no_for_peer(peer_id: i32, conn: &SqliteConnection) -> i32 {
         event::table
             .filter(event::peer_id.eq(peer_id))
-            .select(event::seq_no)
+            .select(sql("seq_no + 1"))
             .first::<i32>(conn)
             .unwrap_or_default()
-            + 1
     }
 
     pub fn create_local(conn: &SqliteConnection) -> i32 {
         let peer_id = Peer::local_peer_id(conn);
         let seq_no = Self::next_seq_no_for_peer(peer_id, conn);
-        let now = select(diesel::dsl::now).get_result::<NaiveDateTime>(conn).unwrap();
         insert_into(event::table)
             .values(&(
                 event::ts.eq(now),
@@ -94,10 +101,10 @@ impl Relation for SendMessageEvent {
     fn run_rules(conn: &SqliteConnection) -> usize {
         send_message_event::table
             .select((send_message_event::asserted_at,))
-            .left_outer_join(entity::table.on(send_message_event::asserted_at.eq(entity::introduced_in)))
-            .filter(entity::introduced_in.is_null())
+            .left_outer_join(entity::table.on(send_message_event::asserted_at.eq(entity::introduced_at)))
+            .filter(entity::introduced_at.is_null())
             .insert_into(entity::table)
-            .into_columns((entity::introduced_in,))
+            .into_columns((entity::introduced_at,))
             .execute(conn)
             .unwrap()
     }
@@ -114,7 +121,7 @@ impl Relation for Message {
     fn run_rules(conn: &SqliteConnection) -> usize {
         entity::table
             .select((entity::id,))
-            .inner_join(send_message_event::table.on(send_message_event::asserted_at.eq(entity::introduced_in)))
+            .inner_join(send_message_event::table.on(send_message_event::asserted_at.eq(entity::introduced_at)))
             .left_outer_join(message::table)
             .filter(message::entity_id.is_null())
             .insert_into(message::table)
@@ -137,15 +144,101 @@ pub struct MessageBody {
 impl Relation for MessageBody {
     fn run_rules(conn: &SqliteConnection) -> usize {
         send_message_event::table
-            .inner_join(entity::table.on(send_message_event::asserted_at.eq(entity::introduced_in)))
+            .inner_join(entity::table.on(send_message_event::asserted_at.eq(entity::introduced_at)))
             .left_outer_join(
                 message_body::table.on(entity::id.eq(message_body::entity_id)
-                    .and(entity::introduced_in.eq(message_body::asserted_at))))
+                    .and(entity::introduced_at.eq(message_body::asserted_at))))
             .filter(message_body::entity_id.is_null())
             .select((entity::id, send_message_event::asserted_at, send_message_event::body))
             .insert_into(message_body::table)
             .execute(conn)
             .unwrap()
+    }
+}
+
+#[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
+#[table_name="message_author"]
+#[primary_key(entity_id)]
+#[belongs_to(Entity)]
+#[belongs_to(Event, foreign_key="asserted_at")]
+pub struct MessageAuthor {
+    pub entity_id: i32,
+    pub asserted_at: i32,
+    pub author_id: i32,
+}
+impl Relation for MessageAuthor {
+    fn run_rules(conn: &SqliteConnection) -> usize {
+        send_message_event::table
+            .inner_join(entity::table.on(send_message_event::asserted_at.eq(entity::introduced_at)))
+            .inner_join(event::table)
+            .left_outer_join(message_author::table.on(entity::id.eq(message_author::entity_id)))
+            .filter(message_author::entity_id.is_null())
+            .select((entity::id, send_message_event::asserted_at, event::peer_id))
+            .insert_into(message_author::table)
+            .execute(conn)
+            .unwrap()
+    }
+}
+
+#[derive(Identifiable, Insertable, Queryable, Associations, PartialEq, Debug)]
+#[table_name="identify_with_event"]
+#[primary_key(asserted_at)]
+#[belongs_to(Peer, foreign_key="with_id")]
+pub struct IdentifyWithEvent {
+    pub asserted_at: i32,
+    pub with_id: i32,
+}
+
+#[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
+#[table_name="mutually_identify"]
+#[primary_key(left_id, right_id)]
+#[belongs_to(Peer, foreign_key="left_id")]
+pub struct MutuallyIdentify {
+    pub left_id: i32,
+    pub right_id: i32
+}
+impl Relation for MutuallyIdentify {
+    fn run_rules(conn: &SqliteConnection) -> usize {
+        sql_query("
+            INSERT INTO mutually_identify
+            SELECT new.left_id, new.right_id FROM (
+                SELECT id AS left_id, id AS right_id FROM peer
+                UNION
+                SELECT event1.peer_id AS left_id, event2.peer_id AS right_id
+                FROM identify_with_event AS id1 JOIN event AS event1 ON id1.asserted_at = event1.id
+                JOIN identify_with_event AS id2 ON event1.peer_id = id2.with_id
+                JOIN event AS event2 ON id2.asserted_at = event2.id AND event2.peer_id = id1.with_id
+            ) AS new
+            LEFT JOIN mutually_identify AS old ON new.left_id = old.left_id AND new.right_id = old.right_id
+            WHERE old.left_id IS NULL
+        ").execute(conn).unwrap()
+    }
+}
+
+#[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
+#[table_name="same_person"]
+#[primary_key(left_id, right_id)]
+#[belongs_to(Peer, foreign_key="left_id")]
+pub struct SamePerson {
+    pub left_id: i32,
+    pub right_id: i32
+}
+impl Relation for SamePerson {
+    fn run_rules(conn: &SqliteConnection) -> usize {
+        sql_query("
+            WITH RECURSIVE same AS (
+                SELECT left_id, right_id FROM mutually_identify
+                UNION
+                SELECT same.left_id, mut.right_id
+                FROM mutually_identify AS mut
+                JOIN same ON same.right_id = mut.left_id
+            )
+            INSERT INTO same_person
+            SELECT same.left_id, same.right_id
+            FROM same
+            LEFT JOIN same_person AS old ON same.left_id = old.left_id AND same.right_id = old.right_id
+            WHERE old.left_id IS NULL
+        ").execute(conn).unwrap()
     }
 }
 

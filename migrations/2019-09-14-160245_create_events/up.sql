@@ -1,6 +1,6 @@
 CREATE TABLE entity (
     id INTEGER PRIMARY KEY NOT NULL,
-    introduced_in INTEGER NOT NULL REFERENCES event (id)
+    introduced_at INTEGER NOT NULL REFERENCES event (id)
 );
 
 CREATE TABLE peer (
@@ -31,6 +31,29 @@ CREATE TABLE message_body (
     asserted_at INTEGER NOT NULL REFERENCES event (id),
     body TEXT NOT NULL,
     PRIMARY KEY (entity_id, asserted_at)
+);
+
+CREATE TABLE message_author (
+    entity_id INTEGER PRIMARY KEY NOT NULL REFERENCES entity (id),
+    asserted_at INTEGER NOT NULL REFERENCES event (id),
+    peer_id INTEGER NOT NULL REFERENCES peer (id)
+);
+
+CREATE TABLE identify_with_event (
+    asserted_at INTEGER PRIMARY KEY NOT NULL REFERENCES event (id),
+    with_id INTEGER NOT NULL REFERENCES peer (id)
+);
+
+CREATE TABLE mutually_identify (
+    left_id INTEGER NOT NULL REFERENCES peer (id),
+    right_id INTEGER NOT NULL REFERENCES peer (id),
+    PRIMARY KEY (left_id, right_id)
+);
+
+CREATE TABLE same_person (
+    left_id INTEGER NOT NULL REFERENCES peer (id),
+    right_id INTEGER NOT NULL REFERENCES peer (id),
+    PRIMARY KEY (left_id, right_id)
 );
 
 CREATE TABLE peer_name (

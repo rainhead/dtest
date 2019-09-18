@@ -4,11 +4,11 @@ pub mod models;
 #[macro_use]
 extern crate diesel;
 
-
-
 /*
-? which actions are, or are not, idempotent?
+? which productions are, or are not, idempotent?
+ --> creating entities, peers, or events is non-idempotent
 ? calculate record by record, or relationally?
+ --> relationally, so it's easy to rev the schema by blowing it away and recreating it
 
 - incoming event
     - local: new send message event (body)
