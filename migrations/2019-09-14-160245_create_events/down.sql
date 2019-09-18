@@ -1,4 +1,5 @@
 DROP TABLE IF EXISTS peer_name;
+DROP TABLE IF EXISTS peer_name_event;
 DROP TABLE IF EXISTS same_person;
 DROP TABLE IF EXISTS mutually_identify;
 DROP TABLE IF EXISTS identify_with_event;

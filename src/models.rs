@@ -242,7 +242,16 @@ impl Relation for SamePerson {
     }
 }
 
-#[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
+#[derive(Identifiable, Insertable, Queryable, Associations, PartialEq, Debug)]
+#[table_name="peer_name_event"]
+#[primary_key(asserted_at)]
+#[belongs_to(Event, foreign_key="asserted_at")]
+pub struct PeerNameEvent {
+    pub asserted_at: i32,
+    pub name: String,
+}
+
+#[derive(Identifiable, Queryable, Associations, Debug)]
 #[table_name="peer_name"]
 #[primary_key(peer_id, asserted_at)]
 #[belongs_to(Peer)]
@@ -251,6 +260,20 @@ impl Relation for SamePerson {
 pub struct PeerName {
     pub peer_id: i32,
     pub asserted_at: i32,
-    pub retracted_at: i32,
+    pub retracted_at: Nullable<i32>,
     pub name: String,
+}
+impl Relation for PeerName {
+    fn run_rules(conn: &SqliteConnection) -> usize {
+        sql_query("
+            INSERT INTO peer_name
+            SELECT sp.right_id AS peer_id, event.id AS asserted_at, lag(event.id) OVER by_peer AS retracted_at, pne.name
+            FROM peer_name_event AS pne
+            JOIN event ON pne.asserted_at = event.id
+            JOIN same_person AS sp ON sp.left_id = event.peer_id
+            WINDOW by_peer AS (
+                PARTITION BY sp.right_id ORDER BY event.ts DESC ROWS BETWEEN 1 PRECEDING AND CURRENT ROW
+            )
+        ").execute(conn).unwrap()
+    }
 }

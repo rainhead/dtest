@@ -67,6 +67,13 @@ table! {
 }
 
 table! {
+    peer_name_event (asserted_at) {
+        asserted_at -> Integer,
+        name -> Text,
+    }
+}
+
+table! {
     same_person (left_id, right_id) {
         left_id -> Integer,
         right_id -> Integer,
@@ -97,6 +104,7 @@ joinable!(message_author -> peer (peer_id));
 joinable!(message_body -> entity (entity_id));
 joinable!(message_body -> event (asserted_at));
 joinable!(peer_name -> peer (peer_id));
+joinable!(peer_name_event -> event (asserted_at));
 joinable!(send_message_event -> event (asserted_at));
 
 allow_tables_to_appear_in_same_query!(
@@ -109,6 +117,7 @@ allow_tables_to_appear_in_same_query!(
     mutually_identify,
     peer,
     peer_name,
+    peer_name_event,
     same_person,
     send_message_event,
     send_message_events,

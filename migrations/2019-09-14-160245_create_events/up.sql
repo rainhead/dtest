@@ -7,6 +7,7 @@ CREATE TABLE peer (
     id INTEGER PRIMARY KEY NOT NULL,
     is_local BOOLEAN NOT NULL DEFAULT 0
 );
+-- this appears not to enforce a unique record or is_local
 CREATE UNIQUE INDEX local_peer ON peer (id) WHERE is_local;
 
 CREATE TABLE event (
@@ -54,6 +55,11 @@ CREATE TABLE same_person (
     left_id INTEGER NOT NULL REFERENCES peer (id),
     right_id INTEGER NOT NULL REFERENCES peer (id),
     PRIMARY KEY (left_id, right_id)
+);
+
+CREATE TABLE peer_name_event (
+    asserted_at INTEGER PRIMARY KEY NOT NULL REFERENCES event (id),
+    name TEXT NOT NULL
 );
 
 CREATE TABLE peer_name (

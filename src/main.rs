@@ -38,6 +38,16 @@ pub fn main() {
         .execute(&conn)
         .unwrap();
 
+    insert_into(event::table)
+        .values(&(event::peer_id.eq(peer2_id), event::ts.eq(now), event::seq_no.eq(1)))
+        .execute(&conn)
+        .unwrap();
+    let event_id = event::table.select(event::id).order(event::id.desc()).first(&conn).unwrap();
+    insert_into(peer_name_event::table)
+        .values(PeerNameEvent { asserted_at: event_id, name: String::from("Peter") })
+        .execute(&conn)
+        .unwrap();
+
     SendMessageEvent::run_rules(&conn);
     Message::run_rules(&conn);
     MessageBody::run_rules(&conn);
@@ -45,4 +55,5 @@ pub fn main() {
 //    IdentifyWithEvent::run_rules(&conn);
     MutuallyIdentify::run_rules(&conn);
     SamePerson::run_rules(&conn);
+    PeerName::run_rules(&conn);
 }
