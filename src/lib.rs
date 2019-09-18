@@ -4,6 +4,8 @@ pub mod models;
 #[macro_use]
 extern crate diesel;
 
+// NB: requires Sqlite 3.25 (2018-09-15) or later
+
 /*
 ? which productions are, or are not, idempotent?
  --> creating entities, peers, or events is non-idempotent
