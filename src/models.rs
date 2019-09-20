@@ -15,7 +15,21 @@ pub trait Relation {
 #[belongs_to(Event, foreign_key="introduced_at")]
 pub struct Entity {
     pub id: i32,
+    pub uuid: uuid::Uuid,
     pub introduced_at: i32,
+}
+impl Entity {
+    pub fn create(conn: &SqliteConnection, event_id: i32) -> i32 {
+        let message_uuid = uuid::Uuid::new_v4();
+        insert_into(entity::table)
+            .values(&(
+                entity::uuid.eq(message_uuid.to_string()),
+                entity::introduced_at.eq(event_id)
+            ))
+            .execute(conn)
+            .unwrap();
+        entity::table.select(entity::id).order(entity::id.desc()).first(conn).unwrap()
+    }
 }
 
 #[derive(Identifiable, Queryable, PartialEq, Debug)]
@@ -61,7 +75,7 @@ impl Event {
         event::table
             .filter(event::peer_id.eq(peer_id))
             .select(sql("seq_no + 1"))
-            .first::<i32>(conn)
+            .first(conn)
             .unwrap_or_default()
     }
 
@@ -80,12 +94,6 @@ impl Event {
     }
 }
 
-#[derive(Insertable)]
-#[table_name="event"]
-pub struct LocalEvent {
-    pub ts: chrono::NaiveDateTime,
-}
-
 // workaround for asserted_at + retracted_at per https://github.com/diesel-rs/diesel/issues/89
 pub struct Retraction(pub Event);
 
@@ -95,7 +103,22 @@ pub struct Retraction(pub Event);
 #[primary_key(asserted_at)]
 pub struct SendMessageEvent {
     pub asserted_at: i32,
+    pub message_id: i32,
     pub body: String,
+}
+impl SendMessageEvent {
+    pub fn create_local(conn: &SqliteConnection, body: String) {
+        let event_id = Event::create_local(conn);
+        let entity_id = Entity::create(conn, event_id);
+        insert_into(send_message_event::table)
+            .values(&(
+                send_message_event::asserted_at.eq(event_id),
+                send_message_event::message_id.eq(entity_id),
+                send_message_event::body.eq(body)
+            ))
+            .execute(conn)
+            .unwrap();
+    }
 }
 impl Relation for SendMessageEvent {
     fn run_rules(conn: &SqliteConnection) -> usize {
@@ -187,6 +210,15 @@ impl Relation for MessageAuthor {
 pub struct IdentifyWithEvent {
     pub asserted_at: i32,
     pub with_id: i32,
+}
+impl IdentifyWithEvent {
+    pub fn create_local(conn: &SqliteConnection, with_id: i32) {
+        let event_id = Event::create_local(conn);
+        insert_into(identify_with_event::table)
+            .values(&(identify_with_event::asserted_at.eq(event_id), identify_with_event::with_id.eq(with_id)))
+            .execute(conn)
+            .unwrap();
+    }
 }
 
 #[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]

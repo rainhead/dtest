@@ -11,42 +11,31 @@ pub fn establish_connection() -> SqliteConnection {
         .expect("Couldn't open database file.")
 }
 
-pub fn main() {
+pub fn main() -> QueryResult<()> {
     let conn = establish_connection();
     Peer::create_local_peer(&conn);
-    let event_id = Event::create_local(&conn);
-    let msg = SendMessageEvent { asserted_at: event_id, body: String::from("Hello, world.") };
-    insert_into(send_message_event::table)
-        .values(&msg)
-        .execute(&conn)
-        .unwrap();
+
+    SendMessageEvent::create_local(&conn, String::from("Hello, world."));
 
     let peer2_id = Peer::create(&conn);
-    let event_id = Event::create_local(&conn);
-    insert_into(identify_with_event::table)
-        .values(IdentifyWithEvent { asserted_at: event_id, with_id: peer2_id })
-        .execute(&conn)
-        .unwrap();
+
+    IdentifyWithEvent::create_local(&conn, peer2_id);
 
     insert_into(event::table)
         .values(&(event::peer_id.eq(peer2_id), event::ts.eq(now), event::seq_no.eq(0)))
-        .execute(&conn)
-        .unwrap();
-    let event_id = event::table.select(event::id).order(event::id.desc()).first(&conn).unwrap();
+        .execute(&conn)?;
+    let event_id = event::table.select(event::id).order(event::id.desc()).first(&conn)?;
     insert_into(identify_with_event::table)
         .values(IdentifyWithEvent { asserted_at: event_id, with_id: Peer::local_peer_id(&conn) })
-        .execute(&conn)
-        .unwrap();
+        .execute(&conn)?;
 
     insert_into(event::table)
         .values(&(event::peer_id.eq(peer2_id), event::ts.eq(now), event::seq_no.eq(1)))
-        .execute(&conn)
-        .unwrap();
-    let event_id = event::table.select(event::id).order(event::id.desc()).first(&conn).unwrap();
+        .execute(&conn)?;
+    let event_id = event::table.select(event::id).order(event::id.desc()).first(&conn)?;
     insert_into(peer_name_event::table)
         .values(PeerNameEvent { asserted_at: event_id, name: String::from("Peter") })
-        .execute(&conn)
-        .unwrap();
+        .execute(&conn)?;
 
     SendMessageEvent::run_rules(&conn);
     Message::run_rules(&conn);
@@ -56,4 +45,6 @@ pub fn main() {
     MutuallyIdentify::run_rules(&conn);
     SamePerson::run_rules(&conn);
     PeerName::run_rules(&conn);
+
+    Ok(())
 }

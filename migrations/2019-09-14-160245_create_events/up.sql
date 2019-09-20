@@ -1,5 +1,6 @@
 CREATE TABLE entity (
     id INTEGER PRIMARY KEY NOT NULL,
+    uuid TEXT UNIQUE NOT NULL,
     introduced_at INTEGER NOT NULL REFERENCES event (id)
 );
 
@@ -20,6 +21,7 @@ CREATE UNIQUE INDEX event_by_peer ON event (peer_id, seq_no DESC);
 
 CREATE TABLE send_message_event (
     asserted_at INTEGER PRIMARY KEY NOT NULL REFERENCES event (id),
+    message_id INTEGER UNIQUE NOT NULL REFERENCES entity (id),
     body TEXT NOT NULL
 );
 

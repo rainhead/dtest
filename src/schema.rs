@@ -1,6 +1,7 @@
 table! {
     entity (id) {
         id -> Integer,
+        uuid -> Text,
         introduced_at -> Integer,
     }
 }
@@ -83,6 +84,7 @@ table! {
 table! {
     send_message_event (asserted_at) {
         asserted_at -> Integer,
+        message_id -> Integer,
         body -> Text,
     }
 }
@@ -105,6 +107,7 @@ joinable!(message_body -> entity (entity_id));
 joinable!(message_body -> event (asserted_at));
 joinable!(peer_name -> peer (peer_id));
 joinable!(peer_name_event -> event (asserted_at));
+joinable!(send_message_event -> entity (message_id));
 joinable!(send_message_event -> event (asserted_at));
 
 allow_tables_to_appear_in_same_query!(
