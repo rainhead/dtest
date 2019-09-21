@@ -404,6 +404,8 @@ impl Relation for PeerName {
             FROM peer_name_event AS pne
             JOIN event ON pne.asserted_at = event.id
             JOIN same_person AS sp ON sp.left_id = event.peer_id
+            LEFT JOIN peer_name old ON old.peer_id = sp.right_id AND old.asserted_at = event.id
+            WHERE old.peer_id IS NULL
             WINDOW by_peer AS (
                 PARTITION BY sp.right_id ORDER BY event.ts DESC ROWS BETWEEN 1 PRECEDING AND CURRENT ROW
             )
