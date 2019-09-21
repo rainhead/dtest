@@ -7,12 +7,9 @@ table! {
 }
 
 table! {
-    event (id) {
-        id -> Integer,
-        ts -> Timestamp,
-        peer_id -> Integer,
-        seq_no -> Integer,
-        ty -> Text,
+    i_identify_with_event (asserted_at) {
+        asserted_at -> Integer,
+        with_id -> Integer,
     }
 }
 
@@ -49,6 +46,13 @@ table! {
     mutually_identify (left_id, right_id) {
         left_id -> Integer,
         right_id -> Integer,
+    }
+}
+
+table! {
+    my_name_is_event (asserted_at) {
+        asserted_at -> Integer,
+        name -> Text,
     }
 }
 
@@ -97,33 +101,48 @@ table! {
     }
 }
 
-joinable!(entity -> event (introduced_at));
-joinable!(event -> peer (peer_id));
-joinable!(identify_with_event -> event (asserted_at));
+table! {
+    time (id) {
+        id -> Integer,
+        wall -> Timestamp,
+        peer_id -> Integer,
+        seq_no -> Integer,
+        event_type -> Text,
+    }
+}
+
+joinable!(entity -> time (introduced_at));
+joinable!(i_identify_with_event -> peer (with_id));
+joinable!(i_identify_with_event -> time (asserted_at));
 joinable!(identify_with_event -> peer (with_id));
+joinable!(identify_with_event -> time (asserted_at));
 joinable!(message -> entity (entity_id));
 joinable!(message_author -> entity (entity_id));
-joinable!(message_author -> event (asserted_at));
 joinable!(message_author -> peer (peer_id));
+joinable!(message_author -> time (asserted_at));
 joinable!(message_body -> entity (entity_id));
-joinable!(message_body -> event (asserted_at));
+joinable!(message_body -> time (asserted_at));
+joinable!(my_name_is_event -> time (asserted_at));
 joinable!(peer_name -> peer (peer_id));
-joinable!(peer_name_event -> event (asserted_at));
+joinable!(peer_name_event -> time (asserted_at));
 joinable!(send_message_event -> entity (message_id));
-joinable!(send_message_event -> event (asserted_at));
+joinable!(send_message_event -> time (asserted_at));
+joinable!(time -> peer (peer_id));
 
 allow_tables_to_appear_in_same_query!(
     entity,
-    event,
+    i_identify_with_event,
     identify_with_event,
     message,
     message_author,
     message_body,
     mutually_identify,
+    my_name_is_event,
     peer,
     peer_name,
     peer_name_event,
     same_person,
     send_message_event,
     send_message_events,
+    time,
 );

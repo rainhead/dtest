@@ -1,6 +1,7 @@
 use diesel::prelude::*;
 use diesel::dsl::*;
 use diesel::sqlite::SqliteConnection;
+use serde_json::to_string;
 
 use dtest::models::*;
 use dtest::schema::*;
@@ -19,22 +20,32 @@ pub fn main() -> QueryResult<()> {
 
     let peer2_id = Peer::create(&conn);
 
-    IdentifyWithEvent::create_local(&conn, peer2_id);
+    IIdentifyWithEvent::create_local(&conn, peer2_id);
 
-    insert_into(event::table)
-        .values(&(event::peer_id.eq(peer2_id), event::ty.eq("identify_with_event"), event::ts.eq(now), event::seq_no.eq(0)))
+    insert_into(time::table)
+        .values(&(
+            time::peer_id.eq(peer2_id),
+            time::event_type.eq(to_string(&EventType::IIdentifyWithEvent).unwrap()),
+            time::wall.eq(now),
+            time::seq_no.eq(0))
+        )
         .execute(&conn)?;
-    let event_id = event::table.select(event::id).order(event::id.desc()).first(&conn)?;
-    insert_into(identify_with_event::table)
-        .values(IdentifyWithEvent { asserted_at: event_id, with_id: Peer::local_peer_id(&conn) })
+    let event_id = time::table.select(time::id).order(time::id.desc()).first(&conn)?;
+    insert_into(i_identify_with_event::table)
+        .values(IIdentifyWithEvent { asserted_at: event_id, with_id: Peer::local_peer_id(&conn) })
         .execute(&conn)?;
 
-    insert_into(event::table)
-        .values(&(event::peer_id.eq(peer2_id), event::ty.eq("peer_name_event"), event::ts.eq(now), event::seq_no.eq(1)))
+    insert_into(time::table)
+        .values(&(
+            time::peer_id.eq(peer2_id),
+            time::event_type.eq(to_string(&EventType::MyNameIsEvent).unwrap()),
+            time::wall.eq(now),
+            time::seq_no.eq(1))
+        )
         .execute(&conn)?;
-    let event_id = event::table.select(event::id).order(event::id.desc()).first(&conn)?;
-    insert_into(peer_name_event::table)
-        .values(PeerNameEvent { asserted_at: event_id, name: String::from("Peter") })
+    let event_id = time::table.select(time::id).order(time::id.desc()).first(&conn)?;
+    insert_into(my_name_is_event::table)
+        .values(MyNameIsEvent { asserted_at: event_id, name: String::from("Peter") })
         .execute(&conn)?;
 
     SendMessageEvent::run_rules(&conn);
