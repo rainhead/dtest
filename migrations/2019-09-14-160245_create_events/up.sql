@@ -6,6 +6,7 @@ CREATE TABLE entity (
 
 CREATE TABLE peer (
     id INTEGER PRIMARY KEY NOT NULL,
+    uuid TEXT UNIQUE NOT NULL,
     is_local BOOLEAN NOT NULL DEFAULT 0
 );
 -- this appears not to enforce a unique record or is_local
@@ -15,7 +16,8 @@ CREATE TABLE event (
     id INTEGER PRIMARY KEY NOT NULL,
     ts TIMESTAMP NOT NULL,
     peer_id INTEGER NOT NULL REFERENCES peer (id),
-    seq_no INTEGER NOT NULL
+    seq_no INTEGER NOT NULL,
+    ty TEXT NOT NULL
 );
 CREATE UNIQUE INDEX event_by_peer ON event (peer_id, seq_no DESC);
 

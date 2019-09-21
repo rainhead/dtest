@@ -22,7 +22,7 @@ pub fn main() -> QueryResult<()> {
     IdentifyWithEvent::create_local(&conn, peer2_id);
 
     insert_into(event::table)
-        .values(&(event::peer_id.eq(peer2_id), event::ts.eq(now), event::seq_no.eq(0)))
+        .values(&(event::peer_id.eq(peer2_id), event::ty.eq("identify_with_event"), event::ts.eq(now), event::seq_no.eq(0)))
         .execute(&conn)?;
     let event_id = event::table.select(event::id).order(event::id.desc()).first(&conn)?;
     insert_into(identify_with_event::table)
@@ -30,7 +30,7 @@ pub fn main() -> QueryResult<()> {
         .execute(&conn)?;
 
     insert_into(event::table)
-        .values(&(event::peer_id.eq(peer2_id), event::ts.eq(now), event::seq_no.eq(1)))
+        .values(&(event::peer_id.eq(peer2_id), event::ty.eq("peer_name_event"), event::ts.eq(now), event::seq_no.eq(1)))
         .execute(&conn)?;
     let event_id = event::table.select(event::id).order(event::id.desc()).first(&conn)?;
     insert_into(peer_name_event::table)
@@ -45,6 +45,12 @@ pub fn main() -> QueryResult<()> {
     MutuallyIdentify::run_rules(&conn);
     SamePerson::run_rules(&conn);
     PeerName::run_rules(&conn);
+
+    let our_events = PortableEvents::peer_events_since(&conn, 1, -1);
+    println!("{:?}", our_events);
+
+    let their_events = PortableEvents::peer_events_since(&conn, 2, -1);
+    println!("{:?}", their_events);
 
     Ok(())
 }

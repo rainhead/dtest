@@ -5,6 +5,7 @@ use diesel::prelude::*;
 use diesel::dsl::*;
 use diesel::sqlite::SqliteConnection;
 use diesel::sql_query;
+use uuid::Uuid;
 
 pub trait Relation {
     fn run_rules(conn: &SqliteConnection) -> usize;
@@ -15,12 +16,12 @@ pub trait Relation {
 #[belongs_to(Event, foreign_key="introduced_at")]
 pub struct Entity {
     pub id: i32,
-    pub uuid: uuid::Uuid,
+    pub uuid: Uuid,
     pub introduced_at: i32,
 }
 impl Entity {
     pub fn create(conn: &SqliteConnection, event_id: i32) -> i32 {
-        let message_uuid = uuid::Uuid::new_v4();
+        let message_uuid = Uuid::new_v4();
         insert_into(entity::table)
             .values(&(
                 entity::uuid.eq(message_uuid.to_string()),
@@ -29,6 +30,36 @@ impl Entity {
             .execute(conn)
             .unwrap();
         entity::table.select(entity::id).order(entity::id.desc()).first(conn).unwrap()
+    }
+
+    pub fn import(conn: &SqliteConnection, event_id: i32, uuid: Uuid) -> i32 {
+        let existing_id = entity::table
+            .select(entity::id)
+            .filter(entity::uuid.eq(uuid.to_string()))
+            .first(conn)
+            .optional()
+            .unwrap();
+        match existing_id {
+            Some(id) => id,
+            None => {
+                insert_into(entity::table)
+                    .values(&(
+                        entity::uuid.eq(uuid.to_string()),
+                        entity::introduced_at.eq(event_id)
+                    ))
+                    .execute(conn)
+                    .unwrap();
+                Self::import(conn, event_id, uuid)
+            }
+        }
+    }
+
+    pub fn find_by_uuid(conn: &SqliteConnection, uuid: Uuid) -> i32 {
+        entity::table
+            .select(entity::id)
+            .filter(entity::uuid.eq(uuid.to_string()))
+            .first(conn)
+            .expect(&format!("couldn't find entity with uuid {:?}", uuid))
     }
 }
 
@@ -46,6 +77,7 @@ impl Peer {
     pub fn create_local_peer(conn: &SqliteConnection) {
         insert_into(peer::table)
             .values(&(
+                peer::uuid.eq(Uuid::new_v4().to_string()),
                 peer::is_local.eq(true),
             ))
             .execute(conn)
@@ -54,7 +86,7 @@ impl Peer {
 
     pub fn create(conn: &SqliteConnection) -> i32 {
         insert_into(peer::table)
-            .default_values()
+            .values(peer::uuid.eq(Uuid::new_v4().to_string()))
             .execute(conn)
             .unwrap();
         peer::table.select(peer::id).order(peer::id.desc()).first(conn).unwrap()
@@ -69,6 +101,7 @@ pub struct Event {
     pub ts: chrono::NaiveDateTime,
     pub peer_id: i32,
     pub seq_no: i32,
+    pub ty: String,
 }
 impl Event {
     pub fn next_seq_no_for_peer(peer_id: i32, conn: &SqliteConnection) -> i32 {
@@ -79,12 +112,13 @@ impl Event {
             .unwrap_or_default()
     }
 
-    pub fn create_local(conn: &SqliteConnection) -> i32 {
+    pub fn create_local(conn: &SqliteConnection, ty: &str) -> i32 {
         let peer_id = Peer::local_peer_id(conn);
         let seq_no = Self::next_seq_no_for_peer(peer_id, conn);
         insert_into(event::table)
             .values(&(
                 event::ts.eq(now),
+                event::ty.eq(ty),
                 event::peer_id.eq(peer_id),
                 event::seq_no.eq(seq_no),
             ))
@@ -94,12 +128,79 @@ impl Event {
     }
 }
 
+#[derive(Debug)]
+pub struct PortableEvents {
+    pub first_seq_no: i32,
+    pub events: Vec<PortableEventMetadata>,
+}
+impl PortableEvents {
+    pub fn peer_events_since(conn: &SqliteConnection, peer_id: i32, since_seq_no: i32) -> Option<Self> {
+        let events_in = event::table
+            .select((event::id, event::ts, event::ty))
+            .filter(event::peer_id.eq(peer_id))
+            .filter(event::seq_no.gt(since_seq_no))
+            .load(conn)
+            .unwrap();
+        if events_in.is_empty() { return None; }
+        let events_out = events_in.into_iter().map(|(id, ts, ty): (i32, chrono::NaiveDateTime, String)| {
+            match ty.as_ref() {
+                "send_message_event" => {
+                    let record: (String, String) = send_message_event::table
+                        .inner_join(entity::table)
+                        .select((entity::uuid, send_message_event::body))
+                        .filter(send_message_event::asserted_at.eq(id))
+                        .first(conn)
+                        .unwrap();
+                    PortableEventMetadata::SendMessageEvent {
+                        ts,
+                        message_id: Uuid::parse_str(&record.0).unwrap(),
+                        body: record.1,
+                    }
+                },
+                "identify_with_event" => {
+                    let with_id: String = identify_with_event::table
+                        .inner_join(peer::table)
+                        .select(peer::uuid)
+                        .filter(identify_with_event::asserted_at.eq(id))
+                        .first(conn)
+                        .unwrap();
+                    PortableEventMetadata::IdentifyWithEvent {
+                        ts,
+                        with_id: Uuid::parse_str(&with_id).unwrap()
+                    }
+                },
+                "peer_name_event" => {
+                    let name = peer_name_event::table
+                        .select(peer_name_event::name)
+                        .filter(peer_name_event::asserted_at.eq(id))
+                        .first(conn)
+                        .unwrap();
+                    PortableEventMetadata::PeerNameEvent { ts, name }
+                },
+                _ => unreachable!("invalid event type {}", ty)
+            }
+        }).collect();
+        Some(PortableEvents {
+            first_seq_no: since_seq_no + 1,
+            events: events_out,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub enum PortableEventMetadata {
+    SendMessageEvent { ts: chrono::NaiveDateTime, message_id: uuid::Uuid, body: String },
+    IdentifyWithEvent { ts: chrono::NaiveDateTime, with_id: uuid::Uuid },
+    PeerNameEvent { ts: chrono::NaiveDateTime, name: String },
+}
+
 // workaround for asserted_at + retracted_at per https://github.com/diesel-rs/diesel/issues/89
 pub struct Retraction(pub Event);
 
 #[derive(Identifiable, Queryable, Associations, Insertable, PartialEq, Debug)]
 #[table_name="send_message_event"]
 #[belongs_to(Event, foreign_key="asserted_at")]
+#[belongs_to(Entity, foreign_key="message_id")]
 #[primary_key(asserted_at)]
 pub struct SendMessageEvent {
     pub asserted_at: i32,
@@ -108,7 +209,7 @@ pub struct SendMessageEvent {
 }
 impl SendMessageEvent {
     pub fn create_local(conn: &SqliteConnection, body: String) {
-        let event_id = Event::create_local(conn);
+        let event_id = Event::create_local(conn, "send_message_event");
         let entity_id = Entity::create(conn, event_id);
         insert_into(send_message_event::table)
             .values(&(
@@ -213,7 +314,7 @@ pub struct IdentifyWithEvent {
 }
 impl IdentifyWithEvent {
     pub fn create_local(conn: &SqliteConnection, with_id: i32) {
-        let event_id = Event::create_local(conn);
+        let event_id = Event::create_local(conn, "identify_with_event");
         insert_into(identify_with_event::table)
             .values(&(identify_with_event::asserted_at.eq(event_id), identify_with_event::with_id.eq(with_id)))
             .execute(conn)

@@ -12,6 +12,7 @@ table! {
         ts -> Timestamp,
         peer_id -> Integer,
         seq_no -> Integer,
+        ty -> Text,
     }
 }
 
@@ -54,6 +55,7 @@ table! {
 table! {
     peer (id) {
         id -> Integer,
+        uuid -> Text,
         is_local -> Bool,
     }
 }
