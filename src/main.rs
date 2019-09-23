@@ -1,7 +1,6 @@
 use diesel::prelude::*;
 use diesel::dsl::*;
 use diesel::sqlite::SqliteConnection;
-use serde_json::to_string;
 
 use dtest::models::*;
 use dtest::schema::*;
@@ -16,6 +15,11 @@ pub fn main() -> QueryResult<()> {
     let conn = establish_connection();
     Peer::create_local_peer(&conn);
 
+    let event_id = Time::create_local::<MyNameIsEvent>(&conn);
+    insert_into(my_name_is_event::table)
+        .values(MyNameIsEvent { asserted_at: event_id, name: String::from("Pierre") })
+        .execute(&conn)?;
+
     SendMessageEvent::create_local(&conn, String::from("Hello, world."));
 
     let peer2_id = Peer::create(&conn);
@@ -25,7 +29,7 @@ pub fn main() -> QueryResult<()> {
     insert_into(time::table)
         .values(&(
             time::peer_id.eq(peer2_id),
-            time::event_type.eq(to_string(&EventType::IIdentifyWithEvent).unwrap()),
+            time::event_type.eq(serde_json::to_string(&EventType::IIdentifyWithEvent).unwrap()),
             time::wall.eq(now),
             time::seq_no.eq(0))
         )
@@ -38,7 +42,7 @@ pub fn main() -> QueryResult<()> {
     insert_into(time::table)
         .values(&(
             time::peer_id.eq(peer2_id),
-            time::event_type.eq(to_string(&EventType::MyNameIsEvent).unwrap()),
+            time::event_type.eq(serde_json::to_string(&EventType::MyNameIsEvent).unwrap()),
             time::wall.eq(now),
             time::seq_no.eq(1))
         )
@@ -48,14 +52,15 @@ pub fn main() -> QueryResult<()> {
         .values(MyNameIsEvent { asserted_at: event_id, name: String::from("Peter") })
         .execute(&conn)?;
 
-    SendMessageEvent::run_rules(&conn);
-    Message::run_rules(&conn);
-    MessageBody::run_rules(&conn);
-    MessageAuthor::run_rules(&conn);
+    SendMessageEvent::refresh(&conn);
+    Message::refresh(&conn);
+    MessageBody::refresh(&conn);
+    MessageAuthor::refresh(&conn);
 //    IdentifyWithEvent::run_rules(&conn);
-    MutuallyIdentify::run_rules(&conn);
-    SamePerson::run_rules(&conn);
-    PeerName::run_rules(&conn);
+    MutuallyIdentify::refresh(&conn);
+    SamePerson::refresh(&conn);
+    PeerName::refresh(&conn);
+    MessageView::refresh(&conn);
 
     let our_events = PortableEvents::peer_events_since(&conn, 1, -1);
     println!("{:?}", our_events);

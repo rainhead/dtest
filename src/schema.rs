@@ -43,6 +43,15 @@ table! {
 }
 
 table! {
+    message_view (entity_id) {
+        entity_id -> Integer,
+        author_name -> Nullable<Text>,
+        body -> Text,
+        sent_at -> Timestamp,
+    }
+}
+
+table! {
     mutually_identify (left_id, right_id) {
         left_id -> Integer,
         right_id -> Integer,
@@ -122,6 +131,7 @@ joinable!(message_author -> peer (peer_id));
 joinable!(message_author -> time (asserted_at));
 joinable!(message_body -> entity (entity_id));
 joinable!(message_body -> time (asserted_at));
+joinable!(message_view -> entity (entity_id));
 joinable!(my_name_is_event -> time (asserted_at));
 joinable!(peer_name -> peer (peer_id));
 joinable!(peer_name_event -> time (asserted_at));
@@ -136,6 +146,7 @@ allow_tables_to_appear_in_same_query!(
     message,
     message_author,
     message_body,
+    message_view,
     mutually_identify,
     my_name_is_event,
     peer,

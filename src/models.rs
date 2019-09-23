@@ -10,7 +10,7 @@ use serde_json::to_string;
 use uuid::Uuid;
 
 pub trait Relation {
-    fn run_rules(conn: &SqliteConnection) -> usize;
+    fn refresh(conn: &SqliteConnection) -> usize;
 }
 
 #[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
@@ -245,7 +245,7 @@ impl Event for SendMessageEvent {
     }
 }
 impl Relation for SendMessageEvent {
-    fn run_rules(conn: &SqliteConnection) -> usize {
+    fn refresh(conn: &SqliteConnection) -> usize {
         send_message_event::table
             .select((send_message_event::asserted_at,))
             .left_outer_join(entity::table.on(send_message_event::asserted_at.eq(entity::introduced_at)))
@@ -265,7 +265,7 @@ pub struct Message {
     pub entity_id: i32,
 }
 impl Relation for Message {
-    fn run_rules(conn: &SqliteConnection) -> usize {
+    fn refresh(conn: &SqliteConnection) -> usize {
         entity::table
             .select((entity::id,))
             .inner_join(send_message_event::table.on(send_message_event::asserted_at.eq(entity::introduced_at)))
@@ -289,7 +289,7 @@ pub struct MessageBody {
     pub body: String,
 }
 impl Relation for MessageBody {
-    fn run_rules(conn: &SqliteConnection) -> usize {
+    fn refresh(conn: &SqliteConnection) -> usize {
         send_message_event::table
             .inner_join(entity::table.on(send_message_event::asserted_at.eq(entity::introduced_at)))
             .left_outer_join(
@@ -314,7 +314,7 @@ pub struct MessageAuthor {
     pub author_id: i32,
 }
 impl Relation for MessageAuthor {
-    fn run_rules(conn: &SqliteConnection) -> usize {
+    fn refresh(conn: &SqliteConnection) -> usize {
         send_message_event::table
             .inner_join(entity::table.on(send_message_event::asserted_at.eq(entity::introduced_at)))
             .inner_join(time::table)
@@ -322,6 +322,32 @@ impl Relation for MessageAuthor {
             .filter(message_author::entity_id.is_null())
             .select((entity::id, send_message_event::asserted_at, time::peer_id))
             .insert_into(message_author::table)
+            .execute(conn)
+            .unwrap()
+    }
+}
+
+#[derive(Identifiable, Queryable, Associations, Debug)]
+#[table_name="message_view"]
+#[primary_key(entity_id)]
+#[belongs_to(Entity)]
+pub struct MessageView {
+    pub entity_id: i32,
+    pub author_name: String,
+    pub body: String,
+    pub sent_at: chrono::NaiveDateTime,
+}
+impl Relation for MessageView {
+    fn refresh(conn: &SqliteConnection) -> usize {
+        message::table
+            .inner_join(entity::table.on(entity::id.eq(message::entity_id)))
+            .inner_join(time::table.on(entity::introduced_at.eq(time::id)))
+            .inner_join(message_body::table.on(message_body::entity_id.eq(message::entity_id)))
+            .inner_join(message_author::table.on(message_author::entity_id.eq(message::entity_id)))
+            .left_outer_join(peer_name::table.on(peer_name::peer_id.eq(message_author::peer_id)))
+            .filter(peer_name::retracted_at.is_not_null())
+            .select((message::entity_id, peer_name::name.nullable(), message_body::body, time::wall))
+            .insert_into(message_view::table)
             .execute(conn)
             .unwrap()
     }
@@ -368,7 +394,7 @@ pub struct MutuallyIdentify {
     pub right_id: i32
 }
 impl Relation for MutuallyIdentify {
-    fn run_rules(conn: &SqliteConnection) -> usize {
+    fn refresh(conn: &SqliteConnection) -> usize {
         sql_query("
             INSERT INTO mutually_identify
             SELECT new.left_id, new.right_id FROM (
@@ -394,7 +420,7 @@ pub struct SamePerson {
     pub right_id: i32
 }
 impl Relation for SamePerson {
-    fn run_rules(conn: &SqliteConnection) -> usize {
+    fn refresh(conn: &SqliteConnection) -> usize {
         sql_query("
             WITH RECURSIVE same AS (
                 SELECT left_id, right_id FROM mutually_identify
@@ -446,7 +472,7 @@ pub struct PeerName {
     pub name: String,
 }
 impl Relation for PeerName {
-    fn run_rules(conn: &SqliteConnection) -> usize {
+    fn refresh(conn: &SqliteConnection) -> usize {
         sql_query("
             INSERT INTO peer_name
             SELECT sp.right_id AS peer_id, time.id AS asserted_at, lag(time.id) OVER by_peer AS retracted_at, myname.name

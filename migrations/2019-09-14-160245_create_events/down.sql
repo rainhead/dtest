@@ -3,6 +3,7 @@ DROP TABLE IF EXISTS my_name_is_event;
 DROP TABLE IF EXISTS same_person;
 DROP TABLE IF EXISTS mutually_identify;
 DROP TABLE IF EXISTS i_identify_with_event;
+DROP TABLE IF EXISTS message_view;
 DROP TABLE IF EXISTS message_author;
 DROP TABLE IF EXISTS message_body;
 DROP TABLE IF EXISTS message;

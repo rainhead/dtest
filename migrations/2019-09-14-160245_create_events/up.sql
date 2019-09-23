@@ -44,6 +44,13 @@ CREATE TABLE message_author (
     peer_id INTEGER NOT NULL REFERENCES peer (id)
 );
 
+CREATE TABLE message_view (
+    entity_id INTEGER PRIMARY KEY NOT NULL REFERENCES entity (id),
+    author_name TEXT,
+    body TEXT NOT NULL,
+    sent_at TIMESTAMP NOT NULL
+);
+
 CREATE TABLE i_identify_with_event (
     asserted_at INTEGER PRIMARY KEY NOT NULL REFERENCES time (id),
     with_id INTEGER NOT NULL REFERENCES peer (id)
